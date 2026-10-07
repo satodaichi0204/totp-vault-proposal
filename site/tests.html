@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TOTP Vault テスト結果</title>
+<meta name="description" content="C# (.NET 10) の TOTP・暗号化の中核部分の自動テスト結果。">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/doc.css">
+<link rel="stylesheet" href="assets/tests.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="brand" href="./">
+      <img class="brand-mark" src="assets/icon.svg" alt="">
+      <span class="brand-name">TOTP Vault<span class="brand-sub">Windows 向け 2段階認証アプリ ご提案資料</span></span>
+    </a>
+    <nav class="site-nav" aria-label="資料">
+      <a href="./">操作デモ</a>
+      <a href="security.html">セキュリティ設計</a>
+      <a href="tests.html" aria-current="page">テスト結果</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page doc">
+  <button type="button" class="btn print-btn" id="print">印刷・PDF で保存</button>
+  <h1>テスト結果（C# / .NET 10）</h1>
+  <p class="meta">実行日：2026年10月7日 ／ 対象：試作した中核部分（TOTP の計算、QR コードの中身の解析、暗号化保存）</p>
+
+  <div class="stat-row">
+    <div class="stat good"><b>91 / 91</b><span>合格</span></div>
+    <div class="stat"><b>0</b><span>不合格</span></div>
+    <div class="stat"><b>28 / 28</b><span>RFC の TOTP・HOTP 正解値と一致</span></div>
+    <div class="stat"><b>1285 ms</b><span>ロック解除の時間（Argon2id 既定値）</span></div>
+  </div>
+
+  <div class="note">
+    <p>本番のアプリで使う、<strong>画面に依存しない中核部分</strong>を先に試作し、自動テストを行いました。ソースコードは<a href="https://github.com/satodaichi0204/totp-vault-proposal">GitHub</a>で公開しています。次のコマンドで、どなたでも同じテストを実行できます。</p>
+    <pre><code>cd totp-core
+dotnet test</code></pre>
+  </div>
+
+  <h2>実行環境</h2>
+  <dl class="kv">
+    <dt>OS</dt><dd>Windows 10 Pro（検証用の仮想マシン、AMD EPYC-Milan）</dd>
+    <dt>.NET</dt><dd>.NET SDK 10.0.401 / ランタイム 10.0.12（Release ビルド）</dd>
+    <dt>テスト</dt><dd>xUnit 2.9.3</dd>
+    <dt>外部ライブラリ</dt><dd>Konscious.Security.Cryptography.Argon2 1.3.1（Argon2id のみ。それ以外は .NET 標準）</dd>
+  </dl>
+
+  <h2>RFC の正解値との照合 <span class="count">35 / 35</span></h2>
+  <p class="desc">RFC 6238 付録B（SHA-1/256/512・8桁、6つの時刻）、RFC 4226 付録D（HOTP）、RFC 4648（Base32）（<code>RfcVectorTests.cs</code>）</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>テスト</th><th>結果</th><th>時間</th></tr></thead>
+      <tbody>
+<tr><td>RFC 4226 Appendix D / HOTP / SHA-1 / 6桁<div class="args">counter: 0, expected: &quot;755224&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 4226 Appendix D / HOTP / SHA-1 / 6桁<div class="args">counter: 1, expected: &quot;287082&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 4226 Appendix D / HOTP / SHA-1 / 6桁<div class="args">counter: 2, expected: &quot;359152&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 4226 Appendix D / HOTP / SHA-1 / 6桁<div class="args">counter: 3, expected: &quot;969429&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 4226 Appendix D / HOTP / SHA-1 / 6桁<div class="args">counter: 4, expected: &quot;338314&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 4226 Appendix D / HOTP / SHA-1 / 6桁<div class="args">counter: 5, expected: &quot;254676&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 4226 Appendix D / HOTP / SHA-1 / 6桁<div class="args">counter: 6, expected: &quot;287922&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 4226 Appendix D / HOTP / SHA-1 / 6桁<div class="args">counter: 7, expected: &quot;162583&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 4226 Appendix D / HOTP / SHA-1 / 6桁<div class="args">counter: 8, expected: &quot;399871&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 4226 Appendix D / HOTP / SHA-1 / 6桁<div class="args">counter: 9, expected: &quot;520489&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 4648 10章 / Base32 の符号化と復号<div class="args">plain: &quot;&quot;, encoded: &quot;&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 4648 10章 / Base32 の符号化と復号<div class="args">plain: &quot;f&quot;, encoded: &quot;MY======&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 4648 10章 / Base32 の符号化と復号<div class="args">plain: &quot;fo&quot;, encoded: &quot;MZXQ====&quot;</div></td><td class="pass">合格</td><td class="num">2 ms</td></tr>
+<tr><td>RFC 4648 10章 / Base32 の符号化と復号<div class="args">plain: &quot;foo&quot;, encoded: &quot;MZXW6===&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 4648 10章 / Base32 の符号化と復号<div class="args">plain: &quot;foob&quot;, encoded: &quot;MZXW6YQ=&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 4648 10章 / Base32 の符号化と復号<div class="args">plain: &quot;fooba&quot;, encoded: &quot;MZXW6YTB&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 4648 10章 / Base32 の符号化と復号<div class="args">plain: &quot;foobar&quot;, encoded: &quot;MZXW6YTBOI======&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-1 / 8桁<div class="args">unixTime: 59, sha1: &quot;94287082&quot;, sha256: &quot;46119246&quot;, sha512: &quot;90693936&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-1 / 8桁<div class="args">unixTime: 1111111109, sha1: &quot;07081804&quot;, sha256: &quot;68084774&quot;, sha512: &quot;25091201&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-1 / 8桁<div class="args">unixTime: 1111111111, sha1: &quot;14050471&quot;, sha256: &quot;67062674&quot;, sha512: &quot;99943326&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-1 / 8桁<div class="args">unixTime: 1234567890, sha1: &quot;89005924&quot;, sha256: &quot;91819424&quot;, sha512: &quot;93441116&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-1 / 8桁<div class="args">unixTime: 2000000000, sha1: &quot;69279037&quot;, sha256: &quot;90698825&quot;, sha512: &quot;38618901&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-1 / 8桁<div class="args">unixTime: 20000000000, sha1: &quot;65353130&quot;, sha256: &quot;77737706&quot;, sha512: &quot;47863826&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-256 / 8桁<div class="args">unixTime: 59, sha1: &quot;94287082&quot;, sha256: &quot;46119246&quot;, sha512: &quot;90693936&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-256 / 8桁<div class="args">unixTime: 1111111109, sha1: &quot;07081804&quot;, sha256: &quot;68084774&quot;, sha512: &quot;25091201&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-256 / 8桁<div class="args">unixTime: 1111111111, sha1: &quot;14050471&quot;, sha256: &quot;67062674&quot;, sha512: &quot;99943326&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-256 / 8桁<div class="args">unixTime: 1234567890, sha1: &quot;89005924&quot;, sha256: &quot;91819424&quot;, sha512: &quot;93441116&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-256 / 8桁<div class="args">unixTime: 2000000000, sha1: &quot;69279037&quot;, sha256: &quot;90698825&quot;, sha512: &quot;38618901&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-256 / 8桁<div class="args">unixTime: 20000000000, sha1: &quot;65353130&quot;, sha256: &quot;77737706&quot;, sha512: &quot;47863826&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-512 / 8桁<div class="args">unixTime: 59, sha1: &quot;94287082&quot;, sha256: &quot;46119246&quot;, sha512: &quot;90693936&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-512 / 8桁<div class="args">unixTime: 1111111109, sha1: &quot;07081804&quot;, sha256: &quot;68084774&quot;, sha512: &quot;25091201&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-512 / 8桁<div class="args">unixTime: 1111111111, sha1: &quot;14050471&quot;, sha256: &quot;67062674&quot;, sha512: &quot;99943326&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-512 / 8桁<div class="args">unixTime: 1234567890, sha1: &quot;89005924&quot;, sha256: &quot;91819424&quot;, sha512: &quot;93441116&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-512 / 8桁<div class="args">unixTime: 2000000000, sha1: &quot;69279037&quot;, sha256: &quot;90698825&quot;, sha512: &quot;38618901&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>RFC 6238 Appendix B / SHA-512 / 8桁<div class="args">unixTime: 20000000000, sha1: &quot;65353130&quot;, sha256: &quot;77737706&quot;, sha512: &quot;47863826&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h2>TOTP の動作 <span class="count">9 / 9</span></h2>
+  <p class="desc">6桁・8桁の関係、60秒周期、残り秒数、範囲外の値の拒否（<code>TotpBehaviorTests.cs</code>）</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>テスト</th><th>結果</th><th>時間</th></tr></thead>
+      <tbody>
+<tr><td>6桁のコードは 8桁のコードの下6桁と一致する</td><td class="pass">合格</td><td class="num">3 ms</td></tr>
+<tr><td>空の秘密鍵は拒否する</td><td class="pass">合格</td><td class="num">25 ms</td></tr>
+<tr><td>残り秒数の表示（30秒周期）<div class="args">unixTime: 1800000000, expected: 30</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>残り秒数の表示（30秒周期）<div class="args">unixTime: 1800000001, expected: 29</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>残り秒数の表示（30秒周期）<div class="args">unixTime: 1800000029, expected: 1</div></td><td class="pass">合格</td><td class="num">160 ms</td></tr>
+<tr><td>範囲外の桁数・周期は拒否する<div class="args">digits: 5, period: 30</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>範囲外の桁数・周期は拒否する<div class="args">digits: 6, period: 0</div></td><td class="pass">合格</td><td class="num">2 ms</td></tr>
+<tr><td>範囲外の桁数・周期は拒否する<div class="args">digits: 9, period: 30</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>有効期間 60秒：同じ 60秒の区間では同じコード、区間をまたぐと変わる</td><td class="pass">合格</td><td class="num">7 ms</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h2>シークレットキーの入力 <span class="count">10 / 10</span></h2>
+  <p class="desc">手入力の揺れの許容、使えない文字の拒否、エラーに秘密鍵を含めないこと（<code>Base32InputTests.cs</code>）</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>テスト</th><th>結果</th><th>時間</th></tr></thead>
+      <tbody>
+<tr><td>Base32 で使えない文字は拒否し、エラーに秘密鍵の文字を含めない<div class="args">input: &quot;JBSWY3DP!HPK3PXP&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>Base32 で使えない文字は拒否し、エラーに秘密鍵の文字を含めない<div class="args">input: &quot;ＪＢＳＷＹ３ＤＰ&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>Base32 で使えない文字は拒否し、エラーに秘密鍵の文字を含めない<div class="args">input: &quot;JBSWY3DP0HPK3PXP&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>Base32 で使えない文字は拒否し、エラーに秘密鍵の文字を含めない<div class="args">input: &quot;JBSWY3DP1HPK3PXP&quot;</div></td><td class="pass">合格</td><td class="num">1 ms</td></tr>
+<tr><td>手入力の揺れ（小文字・空白・ハイフン・パディングなし）を許容する</td><td class="pass">合格</td><td class="num">1 ms</td></tr>
+<tr><td>不正な長さ・パディングを拒否する<div class="args">input: &quot;   &quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>不正な長さ・パディングを拒否する<div class="args">input: &quot;A&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>不正な長さ・パディングを拒否する<div class="args">input: &quot;ABC&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>不正な長さ・パディングを拒否する<div class="args">input: &quot;ABCDEF&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>不正な長さ・パディングを拒否する<div class="args">input: &quot;MY==A===&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h2>QR コードの中身（otpauth URI）の解析 <span class="count">17 / 17</span></h2>
+  <p class="desc">各パラメーター、符号化の揺れ、サービス名の食い違い、不正・対象外の URI（<code>OtpAuthUriTests.cs</code>）</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>テスト</th><th>結果</th><th>時間</th></tr></thead>
+      <tbody>
+<tr><td>Dispose で秘密鍵を 0 埋めする</td><td class="pass">合格</td><td class="num">5 ms</td></tr>
+<tr><td>HOTP と Google Authenticator のエクスポート形式は、理由を示して対象外にする<div class="args">uri: &quot;otpauth-migration://offline?data=CjEKCkhlbGxvId6tv&quot;···</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>HOTP と Google Authenticator のエクスポート形式は、理由を示して対象外にする<div class="args">uri: &quot;otpauth://hotp/a?secret=JBSWY3DPEHPK3PXP&amp;counter=0&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>QR コードの URI：SHA-512 / 8桁 / 60秒</td><td class="pass">合格</td><td class="num">5 ms</td></tr>
+<tr><td>QR コードの URI：既定値（SHA-1 / 6桁 / 30秒）</td><td class="pass">合格</td><td class="num">1 ms</td></tr>
+<tr><td>ToString に秘密鍵を含めない（ログ出力対策）</td><td class="pass">合格</td><td class="num">43 ms</td></tr>
+<tr><td>ラベルと issuer が食い違う場合は登録前に確認できるよう印を付ける</td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>ラベルに発行元がない場合は issuer パラメーターを使う</td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>区切りの ':' が %3A、空白が '+' で書かれた URI</td><td class="pass">合格</td><td class="num">6 ms</td></tr>
+<tr><td>大文字小文字の違いだけなら食い違いとして警告しない</td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>範囲外の桁数・周期は拒否する<div class="args">uri: &quot;otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&amp;digits=10&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>範囲外の桁数・周期は拒否する<div class="args">uri: &quot;otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&amp;period=0&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>不正な URI は拒否する<div class="args">uri: &quot;https://example.com/?secret=JBSWY3DPEHPK3PXP&quot;</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>不正な URI は拒否する<div class="args">uri: &quot;otpauth://totp/Example:alice?issuer=Example&quot;</div></td><td class="pass">合格</td><td class="num">24 ms</td></tr>
+<tr><td>不正な URI は拒否する<div class="args">uri: &quot;otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3P&quot;···</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>不正な URI は拒否する<div class="args">uri: &quot;otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3P&quot;···</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+<tr><td>不正な URI は拒否する<div class="args">uri: &quot;otpauth://xotp/Example:alice?secret=JBSWY3DPEHPK3P&quot;···</div></td><td class="pass">合格</td><td class="num">1 ms 未満</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h2>暗号化保存 <span class="count">19 / 19</span></h2>
+  <p class="desc">Argon2id（RFC 9106）、暗号化と復号、改ざん検知、パスワード変更、バックアップの取り違え（<code>VaultCryptoTests.cs</code>）</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>テスト</th><th>結果</th><th>時間</th></tr></thead>
+      <tbody>
+<tr><td>Argon2id の実装が RFC 9106 5.3 のテストベクターと一致する</td><td class="pass">合格</td><td class="num">9 ms</td></tr>
+<tr><td>パスワードが違うと復号できない</td><td class="pass">合格</td><td class="num">42 ms</td></tr>
+<tr><td>バックアップは保管庫と別のパスワードで守られ、取り違えを検知する</td><td class="pass">合格</td><td class="num">55 ms</td></tr>
+<tr><td>ファイルのどこを1ビット書き換えても検知する<div class="args">position: -1</div></td><td class="pass">合格</td><td class="num">351 ms</td></tr>
+<tr><td>ファイルのどこを1ビット書き換えても検知する<div class="args">position: 10</div></td><td class="pass">合格</td><td class="num">186 ms</td></tr>
+<tr><td>ファイルのどこを1ビット書き換えても検知する<div class="args">position: 30</div></td><td class="pass">合格</td><td class="num">11 ms</td></tr>
+<tr><td>ファイルのどこを1ビット書き換えても検知する<div class="args">position: 40</div></td><td class="pass">合格</td><td class="num">28 ms</td></tr>
+<tr><td>ファイルのどこを1ビット書き換えても検知する<div class="args">position: 70</div></td><td class="pass">合格</td><td class="num">31 ms</td></tr>
+<tr><td>ファイルのどこを1ビット書き換えても検知する<div class="args">position: 100</div></td><td class="pass">合格</td><td class="num">24 ms</td></tr>
+<tr><td>ファイルのどこを1ビット書き換えても検知する<div class="args">position: 115</div></td><td class="pass">合格</td><td class="num">33 ms</td></tr>
+<tr><td>ファイルのどこを1ビット書き換えても検知する<div class="args">position: 130</div></td><td class="pass">合格</td><td class="num">21 ms</td></tr>
+<tr><td>マスターパスワード変更：データ部は変えずに鍵だけ包み直す</td><td class="pass">合格</td><td class="num">89 ms</td></tr>
+<tr><td>ロック（Dispose）後は保存できない</td><td class="pass">合格</td><td class="num">18 ms</td></tr>
+<tr><td>細工したファイルで過大なメモリを要求されても処理しない</td><td class="pass">合格</td><td class="num">17 ms</td></tr>
+<tr><td>正しいマスターパスワードで復号できる</td><td class="pass">合格</td><td class="num">26 ms</td></tr>
+<tr><td>同じ内容を2回保存しても、暗号文は毎回変わる（nonce・salt の再利用なし）</td><td class="pass">合格</td><td class="num">48 ms</td></tr>
+<tr><td>別の保管庫のデータ部への差し替えを検知する</td><td class="pass">合格</td><td class="num">47 ms</td></tr>
+<tr><td>保存ファイルに秘密鍵やアカウント名が平文で含まれない</td><td class="pass">合格</td><td class="num">13 ms</td></tr>
+<tr><td>本番の既定値（64 MiB / 3回 / 並列4）での鍵導出時間<div class="out">KDF 既定値: 作成 1093 ms / ロック解除 1285 ms</div></td><td class="pass">合格</td><td class="num">2,381 ms</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h2>壊れにくい保存 <span class="count">1 / 1</span></h2>
+  <p class="desc">一時ファイルからの置き換え、1世代前の保持（<code>AtomicFileTests.cs</code>）</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>テスト</th><th>結果</th><th>時間</th></tr></thead>
+      <tbody>
+<tr><td>上書き保存：新しい内容になり、1世代前が .bak に残り、一時ファイルが残らない</td><td class="pass">合格</td><td class="num">40 ms</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>このテストに含まれないもの</h2>
+  <ul>
+    <li>画面（WPF）の操作、Windows Hello、クリップボード、画面キャプチャの除外、ロックの検知：本番の開発で、実機の確認項目として行います（<a href="security.html#tests">設計書 15章</a>）。</li>
+    <li>ブラウザ版の計算は、<a href="./">操作デモ</a>の「RFC テスト」タブで、お使いのブラウザ上で確かめられます。</li>
+  </ul>
+</main>
+
+<footer class="site-footer">
+  このページは dotnet test の結果ファイル（TRX）から自動で作成しています（tools/make-test-report.mjs）。
+</footer>
+<script src="assets/print.js"></script>
+</body>
+</html>

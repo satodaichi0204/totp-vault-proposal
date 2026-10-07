@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TOTP Vault セキュリティ設計</title>
+<meta name="description" content="Windows 向け 2段階認証（TOTP）管理アプリの技術構成とセキュリティ設計の提案。">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/doc.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="brand" href="./">
+      <img class="brand-mark" src="assets/icon.svg" alt="">
+      <span class="brand-name">TOTP Vault<span class="brand-sub">Windows 向け 2段階認証アプリ ご提案資料</span></span>
+    </a>
+    <nav class="site-nav" aria-label="資料">
+      <a href="./">操作デモ</a>
+      <a href="security.html" aria-current="page">セキュリティ設計</a>
+      <a href="tests.html">テスト結果</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page doc">
+  <button type="button" class="btn print-btn" id="print">印刷・PDF で保存</button>
+  <h1>技術構成とセキュリティ設計（提案）</h1>
+  <p class="meta">2026年10月 版 ／ 対象：Windows 10・11 向けデスクトップアプリ ／ 仕様確定前の提案のため、打ち合わせで調整します</p>
+
+  <section class="summary" aria-labelledby="sum-title">
+    <h2 id="sum-title">要点</h2>
+    <ol>
+      <li><strong>.NET 10（長期サポート、2028年11月まで）+ WPF</strong> で開発します。.NET 8・9 は <strong>2026年11月10日</strong>にサポートが終わるため、新規開発では選びません。</li>
+      <li>保存データは <strong>マスターパスワード → Argon2id → AES-256-GCM</strong> で暗号化します。データ用の鍵と、それを包む鍵を分けるため、パスワード変更や Windows Hello の追加でデータの再暗号化が要りません。<strong>この中心部分は試作済みで、自動テスト 91 件に合格しています。</strong></li>
+      <li><strong>Windows の暗号化機能（DPAPI）だけには頼りません。</strong>同じ Windows ユーザーで動く不正なプログラムに復号されるうえ、別の PC でバックアップを戻せないためです。</li>
+      <li>Windows Hello（第2段階のご提案）は「確認画面を出すだけ」の形にせず、<strong>Windows Hello の鍵で作った値を、データの鍵を守るために使います。</strong>確認画面だけでは、画面を飛ばされると保護になりません。</li>
+      <li>コピーしたコードは、<strong>一定時間で消すだけでなく、クリップボードの履歴（Win+V）とクラウド同期にも残しません。</strong>あわせて、画面共有・録画にアプリの画面が映らない設定にします。</li>
+      <li>アプリは<strong>インターネットに一切接続しません。</strong>外部から攻撃される入口がなく、通信していないことを利用者が確かめられます。</li>
+      <li>守れることと、<strong>守れないこと</strong>（ロック解除中のマルウェアなど）を<a href="#limits">一覧</a>にしています。</li>
+    </ol>
+  </section>
+
+  <nav aria-label="目次">
+    <ol class="toc">
+      <li><a href="#stack">技術構成と選定理由</a></li>
+      <li><a href="#threats">想定する脅威</a></li>
+      <li><a href="#keys">暗号化と鍵の管理</a></li>
+      <li><a href="#password">マスターパスワード</a></li>
+      <li><a href="#hello">Windows Hello</a></li>
+      <li><a href="#clipboard">クリップボード</a></li>
+      <li><a href="#screen">画面の保護</a></li>
+      <li><a href="#autolock">自動ロック</a></li>
+      <li><a href="#memory">メモリ上の機密情報</a></li>
+      <li><a href="#logs">ログ・クラッシュ時の情報</a></li>
+      <li><a href="#storage">保存・バックアップ・復元</a></li>
+      <li><a href="#totp">TOTP と QR コード</a></li>
+      <li><a href="#offline">通信しない設計と時刻</a></li>
+      <li><a href="#deploy">インストーラーと署名</a></li>
+      <li><a href="#tests">テストの方針</a></li>
+      <li><a href="#limits">守れること・守れないこと</a></li>
+      <li><a href="#scope">開発の範囲（段階案）</a></li>
+      <li><a href="#questions">ご確認したい点</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1 -->
+  <h2 id="stack"><span class="num">1</span>技術構成と選定理由</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>項目</th><th>採用</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td>実行環境</td><td>.NET 10（LTS）</td><td>サポートは 2028年11月まで。.NET 8（LTS）と .NET 9 は、どちらも 2026年11月10日に終了します。</td></tr>
+        <tr><td>画面</td><td>WPF（MVVM）</td><td>Windows 10 でも安定して動き、実績と情報が多く、保守しやすいです。Windows 11 風の Fluent テーマが使えます。WinUI 3 は見た目は新しいものの、配布の仕組みが複雑で、Windows 10 での不具合情報も多いため見送ります。</td></tr>
+        <tr><td>暗号</td><td>.NET 標準（AesGcm、HMAC、乱数）＋ Argon2id</td><td>暗号処理は自作せず、OS の暗号機能（CNG）を呼ぶ .NET 標準を使います。Argon2id だけは標準にないため、実績のあるライブラリを使います（試作では Konscious、本番では libsodium と速度を比べて決定）。</td></tr>
+        <tr><td>QR の読み取り</td><td>ZXing.Net</td><td>画像・クリップボード・画面の取り込みから読み取ります（<a href="#totp">12章</a>）。</td></tr>
+        <tr><td>配布</td><td>自己完結型 ＋ インストーラー</td><td>.NET を同梱するため、利用者の PC に .NET を入れる必要がありません。x64 と Arm64（Snapdragon 搭載 PC）向けを作れます。</td></tr>
+        <tr><td>Windows の機能</td><td>Win32 API・WinRT を直接呼ぶ</td><td>クリップボード履歴の除外、画面キャプチャの除外、Windows Hello、ロックの検知に使います。対象は Windows 10 2004 以降（22H2 を推奨）です。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>構成は「画面（WPF）」「アプリの処理」「暗号・TOTP の中核（画面に依存しないライブラリ）」に分けます。中核部分は自動テストで確かめられ、将来ほかの画面（タスクトレイ常駐、コマンドラインなど）を追加しても使い回せます。</p>
+
+  <!-- 2 -->
+  <h2 id="threats"><span class="num">2</span>想定する脅威</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>場面</th><th>起こりうること</th><th>対策（章）</th></tr></thead>
+      <tbody>
+        <tr><td>PC・ディスクの盗難、紛失</td><td>保存ファイルを取り出され、時間をかけて解読される</td><td>Argon2id ＋ AES-256-GCM（3, 4）</td></tr>
+        <tr><td>ファイルの持ち出し・改ざん</td><td>バックアップの流出、細工したファイルを読み込ませる</td><td>暗号化と改ざん検知、入力値の上限（3, 11）</td></tr>
+        <tr><td>席を離れた間</td><td>画面の覗き見、勝手な操作</td><td>自動ロック、Windows のロックと連動（8）</td></tr>
+        <tr><td>画面共有・録画</td><td>オンライン会議でコードが映る</td><td>キャプチャ除外、コードを隠す表示（7）</td></tr>
+        <tr><td>クリップボード</td><td>履歴・クラウド同期・他のアプリにコードが残る</td><td>履歴とクラウドから除外、自動消去（6）</td></tr>
+        <tr><td>ログ・ダンプ</td><td>障害調査の資料から秘密鍵が漏れる</td><td>機密情報を出さない設計（10）</td></tr>
+        <tr><td>偽の QR コード</td><td>サービス名を偽った登録をさせる</td><td>表記の食い違いを警告（12）</td></tr>
+        <tr><td>利用者自身の事故</td><td>パスワード忘れ、PC の故障で全アカウントを失う</td><td>バックアップの促しと、壊れにくい保存（11）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 3 -->
+  <h2 id="keys"><span class="num">3</span>暗号化と鍵の管理</h2>
+  <p>「データを暗号化する鍵（DEK）」と「DEK を包む鍵（KEK）」を分ける、エンベロープ暗号化という方式にします。</p>
+
+  <figure class="diagram">
+    <svg viewBox="0 0 760 330" role="img" aria-labelledby="kd-title kd-desc">
+      <title id="kd-title">鍵の階層</title>
+      <desc id="kd-desc">マスターパスワードから Argon2id で KEK を作り、KEK で DEK を包む。Windows Hello の署名からも別の KEK を作り、同じ DEK を包む。DEK でアカウント一覧を AES-256-GCM で暗号化する。</desc>
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 10 5 0 10Z" class="d-arrowhead"/>
+        </marker>
+      </defs>
+      <!-- パスワード -->
+      <rect x="10" y="20" width="170" height="56" rx="8" class="d-box"/>
+      <text x="95" y="44" text-anchor="middle" class="d-t">マスターパスワード</text>
+      <text x="95" y="63" text-anchor="middle" class="d-s">利用者だけが知る</text>
+      <line x1="180" y1="48" x2="236" y2="48" class="d-line"/>
+      <rect x="240" y="20" width="170" height="56" rx="8" class="d-box"/>
+      <text x="325" y="42" text-anchor="middle" class="d-t">Argon2id</text>
+      <text x="325" y="61" text-anchor="middle" class="d-s">64 MiB・3回・並列4・salt</text>
+      <line x1="410" y1="48" x2="466" y2="48" class="d-line"/>
+      <rect x="470" y="20" width="120" height="56" rx="8" class="d-key"/>
+      <text x="530" y="44" text-anchor="middle" class="d-t">KEK ①</text>
+      <text x="530" y="63" text-anchor="middle" class="d-s">保存しない</text>
+
+      <!-- Hello -->
+      <rect x="10" y="110" width="170" height="56" rx="8" class="d-opt"/>
+      <text x="95" y="133" text-anchor="middle" class="d-t">Windows Hello</text>
+      <text x="95" y="152" text-anchor="middle" class="d-s">TPM 内の鍵で署名</text>
+      <line x1="180" y1="138" x2="236" y2="138" class="d-line"/>
+      <rect x="240" y="110" width="170" height="56" rx="8" class="d-opt"/>
+      <text x="325" y="133" text-anchor="middle" class="d-t">署名 → HKDF</text>
+      <text x="325" y="152" text-anchor="middle" class="d-s">同じ入力で毎回同じ値</text>
+      <line x1="410" y1="138" x2="466" y2="138" class="d-line"/>
+      <rect x="470" y="110" width="120" height="56" rx="8" class="d-key"/>
+      <text x="530" y="133" text-anchor="middle" class="d-t">KEK ②</text>
+      <text x="530" y="152" text-anchor="middle" class="d-s">任意・この PC 専用</text>
+
+      <!-- DEK -->
+      <line x1="590" y1="48" x2="640" y2="92" class="d-line"/>
+      <line x1="590" y1="138" x2="640" y2="104" class="d-line"/>
+      <rect x="610" y="74" width="140" height="48" rx="8" class="d-key"/>
+      <text x="680" y="95" text-anchor="middle" class="d-t">DEK（乱数 256bit）</text>
+      <text x="680" y="112" text-anchor="middle" class="d-s">KEK で包んで保存</text>
+
+      <line x1="680" y1="122" x2="680" y2="196" class="d-line"/>
+      <rect x="560" y="200" width="190" height="56" rx="8" class="d-box"/>
+      <text x="655" y="222" text-anchor="middle" class="d-t">AES-256-GCM</text>
+      <text x="655" y="241" text-anchor="middle" class="d-s">暗号化＋改ざん検知</text>
+      <line x1="560" y1="228" x2="424" y2="228" class="d-line"/>
+      <rect x="240" y="200" width="180" height="56" rx="8" class="d-data"/>
+      <text x="330" y="222" text-anchor="middle" class="d-t">アカウント一覧</text>
+      <text x="330" y="241" text-anchor="middle" class="d-s">秘密鍵・名前・設定</text>
+      <line x1="330" y1="256" x2="330" y2="282" class="d-line"/>
+      <text x="330" y="304" text-anchor="middle" class="d-t">vault.dat（%LOCALAPPDATA%）</text>
+      <text x="330" y="322" text-anchor="middle" class="d-s">一時ファイルに書いてから置き換え・1世代前を .bak に保持</text>
+    </svg>
+    <figcaption>実線は必須、点線は Windows Hello を有効にした場合。バックアップは、別のパスワードと別の DEK で同じ形式のファイルを作ります。</figcaption>
+  </figure>
+
+  <h3>方式と、その理由</h3>
+  <ul>
+    <li><strong>Argon2id</strong>（RFC 9106）：パスワードから鍵を作る計算を、わざと重くします（メモリ 64 MiB、3回、並列4。RFC 9106 が推奨する設定の一つ）。GPU を並べた総当たりを、従来の PBKDF2 より大幅に遅くできます。</li>
+    <li><strong>AES-256-GCM</strong>：暗号化と同時に改ざんを検知します。1ビットでも書き換えられたファイルは開きません。</li>
+    <li><strong>鍵を分ける理由</strong>：マスターパスワードを変えるときは DEK を包み直すだけで、データ部は1バイトも変わりません。Windows Hello の鍵も、同じ DEK をもう一つ包むだけで追加できます。</li>
+    <li><strong>DPAPI を主役にしない理由</strong>：DPAPI は同じ Windows ユーザーで動くプログラムなら誰でも復号でき、別の PC では復号できません。ローカルアカウントで管理者が Windows のパスワードを再設定すると、復号できなくなる場合もあります。</li>
+  </ul>
+
+  <h3>ファイルの形式</h3>
+  <pre><code>magic "TOTPVLT1"（バックアップは "TOTPBAK1"） | 保管庫ID 16B
+Argon2id の条件（メモリ量・回数・並列数）| salt 16B
+DEK 用 nonce 12B | 包んだ DEK 32B | タグ 16B       ← 改ざん検知の対象：先頭から salt まで
+データ用 nonce 12B | タグ 16B | 暗号文             ← 改ざん検知の対象：magic と保管庫ID</code></pre>
+  <ul>
+    <li>nonce と salt は保存のたびに乱数で作り直し、使い回しません。</li>
+    <li>ファイルに書かれた Argon2id の条件には上限を設けます。細工したファイルで大量のメモリを確保させる攻撃を防ぐためです。</li>
+    <li>試作版で、ロック解除にかかる時間は<strong>約 1.3 秒</strong>でした（検証用の仮想マシン、マネージド実装）。本番では libsodium と比べ、0.5〜1 秒に収まるよう条件を決めます。</li>
+  </ul>
+
+  <!-- 4 -->
+  <h2 id="password"><span class="num">4</span>マスターパスワード</h2>
+  <ul>
+    <li>初回設定で作ります。長さ（12文字以上を推奨）と強さの目安を、その場で表示します。強さの判定は PC の中だけで行い、外部には送りません。</li>
+    <li><strong>忘れた場合は、開発者でも復旧できません</strong>（裏口を作らないため）。代わりに、初回設定の最後に暗号化バックアップの作成を必ず案内します（<a href="#storage">11章</a>）。</li>
+    <li>入力を間違えたときの待ち時間は画面上の対策です。ファイルを盗まれた場合の本当の歯止めは Argon2id の計算コストです。この違いを踏まえて設計します。</li>
+    <li>パスワードは PasswordBox で受け取り、文字列（string）に変えずに鍵の計算へ渡します。</li>
+  </ul>
+
+  <!-- 5 -->
+  <h2 id="hello"><span class="num">5</span>Windows Hello（第2段階）</h2>
+  <p>依頼文の「対応検討」に対する方式のご提案です。実機での検証に時間をかけるため、第2段階として分けることを提案します（<a href="#scope">17章</a>）。</p>
+  <div class="two-col">
+    <div class="card ng">
+      <h3>採用しない方法</h3>
+      <p><code>UserConsentVerifier</code> で「本人確認しました」という結果だけを受け取り、ロックを解除する方法。</p>
+      <p>データの鍵は別の場所（DPAPI など）にあるため、確認画面を飛ばすようにアプリを改変されると、そのまま中身を読まれます。<strong>見た目だけの保護</strong>になります。</p>
+    </div>
+    <div class="card ok">
+      <h3>採用する方法</h3>
+      <p><code>KeyCredentialManager</code> で TPM の中に鍵を作り、決まった値に署名させます。署名結果から HKDF で KEK ② を作り、DEK を包みます。</p>
+      <p>顔・指紋・PIN で本人確認しないと署名できないため、<strong>Windows Hello を通らなければ鍵そのものが手に入りません。</strong></p>
+    </div>
+  </div>
+  <ul>
+    <li>登録時に2回署名し、結果が同じであること（毎回同じ値になること）を確かめてから有効にします。</li>
+    <li>マスターパスワードは予備として必ず残します。PC の交換、Windows Hello の再設定、TPM の初期化で Windows Hello は使えなくなるためです。</li>
+    <li>KEK ② はこの PC 専用です。バックアップには使いません。</li>
+    <li>Windows Hello が使えない PC（顔・指紋の装置がない PC でも PIN は使えます）では、設定画面に表示しません。</li>
+  </ul>
+
+  <!-- 6 -->
+  <h2 id="clipboard"><span class="num">6</span>クリップボード</h2>
+  <ul>
+    <li><strong>履歴とクラウド同期から除外</strong>：コードをコピーするときに、Windows が定める3つの形式（<code>ExcludeClipboardContentFromMonitorProcessing</code>、<code>CanIncludeInClipboardHistory</code> = 0、<code>CanUploadToCloudClipboard</code> = 0）を一緒に書き込みます。単に消すだけでは、Win+V の履歴や他の PC にコードが残るためです。</li>
+    <li><strong>自動消去</strong>：既定は 20 秒後（設定で変更可）。消す前にクリップボードの更新番号（<code>GetClipboardSequenceNumber</code>）を確かめ、<strong>利用者が後から別のものをコピーしていたら消しません。</strong></li>
+    <li>ロックしたとき、アプリを終了したときにも、アプリが入れたコードが残っていれば消します。</li>
+    <li>コードは 30 秒前後で無効になるため、秘密鍵そのものとは重みが違います。それでも、他のアプリにコードを渡さないことは、リアルタイムの中継型フィッシングへの対策として意味があります。</li>
+  </ul>
+
+  <!-- 7 -->
+  <h2 id="screen"><span class="num">7</span>画面の保護</h2>
+  <ul>
+    <li><strong>画面共有・録画に映さない</strong>：<code>SetWindowDisplayAffinity</code>（<code>WDA_EXCLUDEFROMCAPTURE</code>）を設定します。オンライン会議で画面全体を共有しても、このアプリの画面は映りません（Windows 10 2004 以降）。</li>
+    <li><strong>コードを隠す表示</strong>：コードを「••• •••」で表示し、クリックでコピーだけできる表示に切り替えられます（<a href="./">デモ</a>で操作できます）。</li>
+    <li>タスクバーのサムネイル、通知、タスクトレイのツールチップには、コードを出しません。</li>
+    <li>登録後は、秘密鍵や QR コードを画面に再表示しません。別の PC への移行は暗号化バックアップで行います。</li>
+  </ul>
+
+  <!-- 8 -->
+  <h2 id="autolock"><span class="num">8</span>自動ロック</h2>
+  <ul>
+    <li>一定時間操作がないとき（既定 5 分、1〜60 分で設定可）。</li>
+    <li><strong>Windows をロックしたとき、スリープ・休止に入るとき、ユーザーを切り替えたとき、リモート接続が切れたとき</strong>（<code>SystemEvents.SessionSwitch</code>、<code>PowerModeChanged</code>）。</li>
+    <li>任意で、最小化したとき・アプリを閉じたとき（タスクトレイ常駐時）。</li>
+    <li>ロックするときは、DEK と復号済みのアカウント一覧をメモリから消し、画面の表示とクリップボードも消します。ロック中は、コードを計算できない状態になります。</li>
+  </ul>
+
+  <!-- 9 -->
+  <h2 id="memory"><span class="num">9</span>メモリ上の機密情報</h2>
+  <p>C# のメモリは自動で管理されるため、完全に消すことは保証できません。そのうえで、<strong>機密情報がメモリにある量と時間を最小にします。</strong></p>
+  <ul>
+    <li>秘密鍵・DEK・パスワードは、消せない文字列（string）ではなくバイト列で扱い、使い終わったらすぐ 0 で埋めます（<code>CryptographicOperations.ZeroMemory</code>）。</li>
+    <li>DEK は、メモリ整理（GC）で別の場所にコピーされないよう、固定した領域（pinned）に置きます。</li>
+    <li>各アカウントの秘密鍵は、メモリ上でも DEK で暗号化したまま持ち、コードを計算する瞬間だけ復号して、すぐ消します。</li>
+    <li><code>SecureString</code> は、Microsoft が新規開発での使用を勧めていないため使いません。</li>
+    <li>手入力欄の文字列など、WPF の内部で一時的に残る部分は消しきれません。設計書とテスト結果に、その範囲を明記します。</li>
+    <li>ロック後にメモリダンプを取り、テスト用の秘密鍵が残っていないことを確かめるテストを行います（<a href="#tests">15章</a>）。</li>
+  </ul>
+
+  <!-- 10 -->
+  <h2 id="logs"><span class="num">10</span>ログ・クラッシュ時の情報</h2>
+  <ul>
+    <li>ログには「何が起きたか」だけを書き、秘密鍵・コード・パスワード・アカウント名・QR の内容は書きません。</li>
+    <li>秘密鍵を持つクラスは、<code>ToString()</code> で中身を出さないようにします（テストで確認済み）。</li>
+    <li>エラーメッセージに入力値を含めません。例えば、シークレットキーの書式エラーで、入力した文字そのものを表示しません（テストで確認済み）。</li>
+    <li>Windows エラー報告がクラッシュ時にメモリダンプを作らないよう設定します（<code>WerAddExcludedApplication</code> など）。</li>
+    <li>利用状況の送信（テレメトリー）は行いません。</li>
+  </ul>
+
+  <!-- 11 -->
+  <h2 id="storage"><span class="num">11</span>保存・バックアップ・復元</h2>
+  <h3>保存</h3>
+  <ul>
+    <li>保存先は <code>%LOCALAPPDATA%\TotpVault\</code> です。移動プロファイルでサーバーに複製されないよう、Roaming ではなく Local に置きます。</li>
+    <li>同じフォルダーの一時ファイルに書き、ディスクへの書き込み完了を待ってから置き換えます。保存中に電源が落ちても、ファイルが書きかけになりません。1世代前のファイルを <code>.bak</code> として残します（暗号化されたまま）。</li>
+  </ul>
+  <h3>バックアップ</h3>
+  <ul>
+    <li><strong>マスターパスワードとは別のパスワード</strong>で、同じ形式で暗号化します。マスターパスワードが漏れても、外に保管したバックアップは守られます。</li>
+    <li>初回設定の最後と、アカウントを追加した後に、バックアップを案内します。最後のバックアップからの日数を画面に表示します。</li>
+    <li>バックアップを作った直後に、そのファイルを読み直して復号できることを確かめます（壊れたバックアップに気づかない事故を防ぐ）。</li>
+  </ul>
+  <h3>復元</h3>
+  <ul>
+    <li>「置き換え」と「追加（統合）」を選べます。追加のときは、同じアカウントを重複して登録しないよう判定します。</li>
+    <li>バックアップファイルと保管庫ファイルを取り違えた場合は、その旨を表示します。</li>
+  </ul>
+
+  <!-- 12 -->
+  <h2 id="totp"><span class="num">12</span>TOTP と QR コード</h2>
+  <ul>
+    <li>RFC 6238（TOTP）と RFC 4226（HOTP）どおりに実装し、<strong>SHA-1・SHA-256・SHA-512、6桁・8桁、30秒・60秒</strong>に対応します。時刻は 64bit で扱い、2038年問題の影響を受けません。</li>
+    <li>QR コードの中身（<code>otpauth://totp/…</code>）を解析します。空白の表記ゆれや、区切り文字の符号化（<code>%3A</code>）にも対応します。</li>
+    <li>QR コードの中で、2か所に書かれたサービス名が食い違う場合は、なりすましの可能性として警告します。</li>
+    <li>シークレットキーの手入力では、小文字・空白・ハイフンを自動で無視し、使えない文字（0・1・8・9 など）は理由を示してお知らせします。</li>
+  </ul>
+  <h3>QR コードの取り込み方</h3>
+  <p>PC では、QR コードはブラウザの画面に表示されることがほとんどです。カメラよりも、次の方法が便利です。</p>
+  <ol>
+    <li><strong>クリップボードの画像から読み取る</strong>：Win+Shift+S で切り取った画像を、そのまま貼り付けます（<a href="./">デモ</a>で操作できます）。</li>
+    <li>画像ファイルから読み取る／URI やシークレットキーを手入力する。</li>
+    <li><strong>画面から読み取る（第2段階）</strong>：ボタン1つで、画面に表示中の QR コードを探して読み取ります。</li>
+  </ol>
+  <p>読み取った画像はファイルに保存せず、読み取り後すぐにメモリから消します。</p>
+
+  <!-- 13 -->
+  <h2 id="offline"><span class="num">13</span>通信しない設計と時刻</h2>
+  <ul>
+    <li>アプリに通信の機能を持たせません。自動更新もしません（更新は、署名付きの新しいインストーラーで配布します）。</li>
+    <li>通信していないことは、Windows ファイアウォールやネットワークの監視ツールで、利用者が確かめられます。</li>
+    <li><strong>時刻のずれ（第2段階）</strong>：TOTP は PC の時刻をもとに計算するため、時計がずれると正しいはずのコードが拒否されます。アプリは通信せずに、Windows の時刻同期の状態（最後に同期した日時）を読み取り、長く同期していない場合は画面でお知らせします。</li>
+  </ul>
+
+  <!-- 14 -->
+  <h2 id="deploy"><span class="num">14</span>インストーラーと署名</h2>
+  <ul>
+    <li>社内の PC へ一括配布する場合は MSI（WiX、Intune やグループポリシーで配布可）、個人の PC へ配る場合は Inno Setup を提案します。どちらも、管理者権限なしでユーザーごとにインストールできる形にします。</li>
+    <li>アンインストールのときは、保管庫ファイルを消すかどうかを確認します（誤って消すと、2段階認証を失うため）。</li>
+    <li><strong>コード署名</strong>：署名がないと、インストール時に Windows の警告（SmartScreen）が出ます。認証アプリで警告が出ると、利用者は不安になります。日本の法人では、認証局の OV コード署名証明書（年に数万円程度）が現実的です。証明書の取得は御社の名義で行う必要があるため、ご判断をお願いします。</li>
+  </ul>
+
+  <!-- 15 -->
+  <h2 id="tests"><span class="num">15</span>テストの方針</h2>
+  <ul>
+    <li><strong>自動テスト</strong>：RFC に載っている正解値（SHA-1/256/512・8桁・2603年の時刻を含む）、暗号化と復号、改ざんの検知、パスワード変更、バックアップの取り違え、壊れにくい保存。<a href="tests.html">試作の段階で 91 件に合格</a>しています。</li>
+    <li><strong>実機での確認</strong>：Windows 10 22H2 と Windows 11 で、表示倍率 100・150・200%、ダークモード、ロックとスリープの検知、クリップボード履歴と画面共有での映り込みを確かめます。</li>
+    <li><strong>主要サービスとの照合</strong>：テスト用のアカウントで、実際のサービスの 2段階認証の登録とログインが通ることを確かめます。</li>
+    <li><strong>機密情報が残らないことの確認</strong>：操作後のログ・設定ファイル・ロック後のメモリダンプを検索し、テスト用の秘密鍵が見つからないことを確かめます。</li>
+    <li>結果は、項目・手順・結果の表にまとめて納品します。</li>
+  </ul>
+
+  <!-- 16 -->
+  <h2 id="limits"><span class="num">16</span>守れること・守れないこと</h2>
+  <div class="two-col">
+    <div class="card ok">
+      <h3>守れること</h3>
+      <ul>
+        <li>PC・ディスクの盗難や紛失で、保存ファイルを読まれること（強いマスターパスワードの場合）</li>
+        <li>保存ファイル・バックアップの改ざん（検知して開かない）</li>
+        <li>席を離れた間の覗き見や操作</li>
+        <li>画面共有・録画への映り込み</li>
+        <li>クリップボードの履歴・クラウド同期にコードが残ること</li>
+        <li>ログやエラー表示から秘密鍵が漏れること</li>
+        <li>保存中の電源断によるファイルの破損</li>
+      </ul>
+    </div>
+    <div class="card ng">
+      <h3>守れないこと（正直にお伝えします）</h3>
+      <ul>
+        <li><strong>ロック解除中に、同じ Windows ユーザーの権限で動くマルウェア</strong>（画面・メモリ・キー入力を読めるため）。ウイルス対策などの、OS 側の対策が前提です。</li>
+        <li>管理者権限を持つ攻撃者による攻撃</li>
+        <li>推測されやすいマスターパスワード（強さの表示で減らせますが、防ぎきれません）</li>
+        <li>キーロガーによるマスターパスワードの盗み見（Windows Hello の併用で、入力の回数を減らせます）</li>
+        <li>.NET が内部で一時的に作るコピーを、完全に消すこと（範囲を最小にします）</li>
+        <li>ページファイル・休止ファイルへの書き出し（BitLocker の利用をお勧めします）</li>
+        <li>古い保管庫ファイル（以前のコピーや .bak）への差し戻し（正しいパスワードで作られた本物のファイルのため、改ざんとしては検知できません。保管庫ファイルの置き場所への書き込みを防ぐ、OS 側の権限管理が前提です）</li>
+        <li>マスターパスワードを忘れた場合の復旧（設計上できません）</li>
+      </ul>
+    </div>
+  </div>
+  <div class="note warn">
+    <p><strong>運用上のご注意</strong>：パスワードと 2段階認証のコードが同じ PC にそろうと、「PC を持っている人」だけでログインできる状態になり、2段階認証の効果が弱まります。社内の重要なアカウントは、スマホなど別の端末と併用するといった運用ルールも、あわせてご検討ください。</p>
+  </div>
+
+  <!-- 17 -->
+  <h2 id="scope"><span class="num">17</span>開発の範囲（段階案）</h2>
+  <p>今回のご依頼の範囲（第1段階）と、別途ご相談とする範囲（第2段階）を分けます。<strong><a href="./">操作デモ</a>で動作する機能は、すべて第1段階に含まれます。</strong>デモや本書で「第2段階」と書いた機能は、ご提案として説明しているもので、第1段階には含みません。</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>段階</th><th>機能</th><th>セキュリティ・納品物</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>第1段階<br>（今回の範囲）</td>
+          <td>
+            <ul>
+              <li>アカウントの登録・編集・削除（削除前の警告、サービス名の食い違いの警告、重複の検知を含む）</li>
+              <li>QR コードからの登録（画像ファイル、クリップボードの画像）</li>
+              <li>シークレットキー・URI の手入力</li>
+              <li>6桁・8桁、SHA-1・SHA-256・SHA-512、30秒・60秒</li>
+              <li>コードの自動更新、残り時間の表示、ワンクリックでのコピー</li>
+              <li>一覧、検索、お気に入り、並び替え、グループによる整理</li>
+              <li>暗号化バックアップと復元</li>
+              <li>マスターパスワードによるロック、自動ロック</li>
+            </ul>
+          </td>
+          <td>
+            <ul>
+              <li>3章 暗号化と鍵の管理</li>
+              <li>4章 マスターパスワード</li>
+              <li>6章 クリップボード</li>
+              <li>7章 画面の保護</li>
+              <li>8章 自動ロック</li>
+              <li>9章 メモリ</li>
+              <li>10章 ログ</li>
+              <li>11章 保存・バックアップ</li>
+              <li>インストーラー、操作・セットアップ手順書、テスト結果</li>
+            </ul>
+          </td>
+        </tr>
+        <tr>
+          <td>第2段階<br>（別途ご相談）</td>
+          <td colspan="2">
+            <ul>
+              <li>Windows Hello（5章の方式。実機での検証に時間をかけるため分けます）</li>
+              <li>画面に表示中の QR コードを、ボタン1つで読み取る機能</li>
+              <li>時刻のずれのお知らせ（13章）</li>
+              <li>Google Authenticator などからの一括取り込み</li>
+              <li>タスクトレイ常駐とショートカットキー</li>
+              <li>コード署名の組み込み（証明書は御社名義での取得が必要）</li>
+            </ul>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>複数の PC 間での同期は、通信が必要になり攻撃の入口が増えるため、対象外とすることを提案します。必要な場合は、暗号化バックアップの受け渡しで対応できます。</p>
+
+  <!-- 18 -->
+  <h2 id="questions"><span class="num">18</span>ご確認したい点</h2>
+  <ol>
+    <li>利用の形：社内で使う（何名、配布方法）か、製品として一般に配布するか。必要な作り込み（署名、インストーラーの形式、更新方法）が変わります。</li>
+    <li>対象の OS：Windows 10 は 22H2 を前提にしてよいか。</li>
+    <li>コード署名証明書：御社でお持ちか、取得のご予定があるか。</li>
+    <li>Windows Hello：第1段階に含めるか、第2段階とするか。</li>
+    <li>バックアップの保存先：PC 内、USB メモリ、社内の共有フォルダーなど。</li>
+    <li>他の認証アプリからの移行が必要か。</li>
+    <li>社内利用の場合、利用記録（いつ、どのアカウントのコードを使ったか）が必要か。</li>
+  </ol>
+</main>
+
+<footer class="site-footer">
+  この資料は提案用です。記載の方式は、打ち合わせの内容に合わせて調整します。
+</footer>
+<script src="assets/print.js"></script>
+</body>
+</html>

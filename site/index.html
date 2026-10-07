@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TOTP Vault 操作デモ</title>
+<meta name="description" content="Windows 向け 2段階認証（TOTP）管理アプリの提案用デモ。ブラウザ内だけで動作し、外部と通信せず、何も保存しません。">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/demo.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="brand" href="./">
+      <img class="brand-mark" src="assets/icon.svg" alt="">
+      <span class="brand-name">TOTP Vault<span class="brand-sub">Windows 向け 2段階認証アプリ ご提案資料</span></span>
+    </a>
+    <nav class="site-nav" aria-label="資料">
+      <a href="./" aria-current="page">操作デモ</a>
+      <a href="security.html">セキュリティ設計</a>
+      <a href="tests.html">テスト結果</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+
+  <section class="intro">
+    <h1>操作デモ</h1>
+    <p class="lead">
+      本番は <strong>.NET 10 + WPF の Windows デスクトップアプリ</strong>です。このページは、画面の操作感と
+      <strong>TOTP の計算が仕様どおりであること</strong>を、インストールなしで確かめていただくためのものです。
+      暗号化保存・Windows Hello・クリップボード履歴の除外などはデスクトップでのみ実装でき、このデモには含みません（<a href="security.html">設計書</a>で説明しています）。
+    </p>
+    <p class="lead scope-note">
+      <strong>このデモで動作する機能は、すべて今回のご依頼の範囲（第1段階）で作る予定のものです。</strong>
+      「第2段階」と書いた機能は、ご提案として説明のみ載せています（<a href="security.html#scope">設計書 17章</a>）。
+    </p>
+
+    <div class="checks">
+      <div class="check">
+        <h2>スマホで正しさを照合</h2>
+        <p>「社内ポータル」の <span class="inline-icon" aria-hidden="true">▦</span> から QR コードを表示し、お手元の認証アプリで読み取ると、このページと<strong>同じ数字</strong>が表示されます。</p>
+      </div>
+      <div class="check">
+        <h2>外部と通信しない</h2>
+        <p>このページは、ブラウザの仕組み（CSP）で外部への通信を禁止しています。下のボタンで確かめられます。</p>
+        <button type="button" class="btn" id="net-test">通信を試す</button>
+        <p class="net-result" id="net-result" role="status"></p>
+      </div>
+      <div class="check">
+        <h2>何も保存しない</h2>
+        <p>Cookie・localStorage を使いません。追加したアカウントは再読み込みで消えます。表示中の秘密鍵はすべてテスト用の値です。</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="view-tabs" role="tablist" aria-label="表示の切り替え">
+    <button type="button" role="tab" id="tab-app" aria-controls="panel-app" aria-selected="true">アプリ画面</button>
+    <button type="button" role="tab" id="tab-rfc" aria-controls="panel-rfc" aria-selected="false" tabindex="-1">RFC テスト（このブラウザで実行）</button>
+  </div>
+
+  <!-- アプリ画面 -->
+  <section id="panel-app" role="tabpanel" aria-labelledby="tab-app">
+    <div class="window" id="window">
+      <div class="titlebar">
+        <img src="assets/icon.svg" alt="" class="titlebar-icon">
+        <span class="titlebar-title">TOTP Vault</span>
+        <span class="titlebar-spacer"></span>
+        <button type="button" class="icon-btn" id="btn-lock" title="今すぐロック（Win+L 相当）">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2h.5A1.5 1.5 0 0 1 13.5 8.5v5A1.5 1.5 0 0 1 12 15H4a1.5 1.5 0 0 1-1.5-1.5v-5A1.5 1.5 0 0 1 4 7h.5Zm1 0h5V5a2.5 2.5 0 0 0-5 0v2Z" fill="currentColor"/></svg>
+          <span>ロック</span>
+        </button>
+        <span class="caption-btns" aria-hidden="true"><span>&#x2013;</span><span>&#x25A1;</span><span>&#x2715;</span></span>
+      </div>
+
+      <div class="toolbar">
+        <label class="search">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 1a5.5 5.5 0 0 1 4.38 8.82l3.65 3.65-.7.71-3.66-3.65A5.5 5.5 0 1 1 6.5 1Zm0 1a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z" fill="currentColor"/></svg>
+          <span class="visually-hidden">検索</span>
+          <input type="search" id="search" placeholder="サービス名・アカウント名で検索（Ctrl+F）" autocomplete="off" spellcheck="false">
+        </label>
+        <button type="button" class="btn btn-primary" id="btn-add">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7.5 2h1v5.5H14v1H8.5V14h-1V8.5H2v-1h5.5Z" fill="currentColor"/></svg>
+          追加
+        </button>
+      </div>
+
+      <div class="filterbar">
+        <div class="chips" id="chips" role="group" aria-label="絞り込み"></div>
+        <label class="sort">並び順
+          <select id="sort">
+            <option value="manual">手動（ドラッグ）</option>
+            <option value="issuer">サービス名</option>
+            <option value="recent">最近使った順</option>
+          </select>
+        </label>
+        <label class="toggle" title="オンライン会議の画面共有などで、コードを映さない">
+          <input type="checkbox" id="mask"> コードを隠す
+        </label>
+      </div>
+
+      <div class="list-wrap">
+        <ol class="list" id="list" aria-label="登録済みアカウント"></ol>
+        <p class="empty" id="empty" hidden></p>
+      </div>
+
+      <div class="statusbar">
+        <span id="clock" title="TOTP は PC の時刻をもとに計算します">端末時刻 --:--:--</span>
+        <span>自動ロックまで <strong id="idle-left">--:--</strong>
+          <select id="idle-minutes" aria-label="自動ロックまでの時間">
+            <option value="1">1分</option>
+            <option value="3" selected>3分</option>
+            <option value="5">5分</option>
+          </select>
+        </span>
+        <label class="toggle small" title="本番では Windows のロック・スリープ・ユーザー切り替えでロックします"><input type="checkbox" id="lock-on-hide" checked> タブを離れたらロック</label>
+        <span class="net-off" title="本番アプリはネットワーク機能を持ちません">● 通信なし</span>
+      </div>
+
+      <!-- ロック画面 -->
+      <div class="lock" id="lock" hidden>
+        <form class="lock-card" id="lock-form" autocomplete="off">
+          <img src="assets/icon.svg" alt="" class="lock-icon">
+          <h2>ロックされています</h2>
+          <p class="lock-reason" id="lock-reason"></p>
+          <label for="lock-pass">マスターパスワード</label>
+          <input type="password" id="lock-pass" autocomplete="off" placeholder="デモでは demo と入力">
+          <p class="lock-error" id="lock-error" role="alert"></p>
+          <button type="submit" class="btn btn-primary">ロック解除</button>
+          <button type="button" class="btn" disabled title="Windows Hello はデスクトップ版のみ">Windows Hello（第2段階のご提案）</button>
+          <p class="lock-foot">本番では、ロック中は暗号鍵をメモリから消去し、コードも計算できない状態になります。</p>
+        </form>
+      </div>
+    </div>
+
+    <p class="window-caption">
+      操作のヒント：コードをクリックでコピー／☆ でお気に入り／⋮ から QR 表示・編集・削除／左端のつまみでドラッグして並べ替え（「手動」並び時）。
+    </p>
+  </section>
+
+  <!-- RFC テスト -->
+  <section id="panel-rfc" role="tabpanel" aria-labelledby="tab-rfc" hidden>
+    <h2 class="section-title">RFC の正解値との照合（このブラウザで今計算）</h2>
+    <p>
+      TOTP の仕様書 RFC 6238 の付録 B と、HOTP の仕様書 RFC 4226 の付録 D に掲載された正解値を、このページの計算処理で計算して照合します。
+      SHA-1 / SHA-256 / SHA-512、8桁・6桁、32bit を超える時刻（2603年）を含みます。
+      C# 版の結果は<a href="tests.html">テスト結果</a>にあります。
+    </p>
+    <p class="rfc-summary" id="rfc-summary" role="status">計算中…</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>仕様</th><th>入力</th><th>アルゴリズム・桁</th><th>正解値</th><th>計算値</th><th>結果</th></tr>
+        </thead>
+        <tbody id="rfc-body"></tbody>
+      </table>
+    </div>
+    <p class="fine">
+      注：RFC 6238 の正解値は、SHA-1 は 20 バイト、SHA-256 は 32 バイト、SHA-512 は 64 バイトの秘密鍵で計算されています（本文ではなく付録のコードに従う必要があります）。
+    </p>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  提案用の見本です。表示している秘密鍵・アカウントはすべて架空のテスト用の値です。
+  同梱ライブラリ：<a href="vendor/LICENSE-qrcode-generator.txt">qrcode-generator</a>（MIT）、<a href="vendor/LICENSE-jsQR.txt">jsQR</a>（Apache-2.0）。
+</footer>
+
+<!-- 追加ダイアログ -->
+<dialog id="dlg-add" class="dialog" aria-labelledby="dlg-add-title">
+  <div class="dialog-head">
+    <h2 id="dlg-add-title">アカウントを追加</h2>
+    <button type="button" class="icon-btn" data-close aria-label="閉じる">&#x2715;</button>
+  </div>
+  <p class="note warn small-note">本物のサービスの QR コードや秘密鍵は入力しないでください。デモ用のテスト値でお試しください（外部への送信はしませんが、デモの目的外です）。</p>
+  <div class="seg" role="tablist" aria-label="追加の方法">
+    <button type="button" role="tab" aria-selected="true" data-mode="image">QR の画像・スクリーンショット</button>
+    <button type="button" role="tab" aria-selected="false" data-mode="uri">URI を貼り付け</button>
+    <button type="button" role="tab" aria-selected="false" data-mode="manual">手動入力</button>
+  </div>
+
+  <div class="add-pane" data-pane="image">
+    <div class="drop" id="drop" tabindex="0">
+      <p><strong>ここに画像をドロップ</strong>、または <kbd>Ctrl</kbd>+<kbd>V</kbd> で貼り付け</p>
+      <p class="fine">Windows では <kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> で画面の QR を切り取り、そのまま貼り付けられます。<br>第2段階のご提案として、画面の QR をボタン1つで読み取る機能もございます。</p>
+      <label class="btn">画像ファイルを選ぶ<input type="file" id="file" accept="image/*" class="visually-hidden"></label>
+    </div>
+    <button type="button" class="btn sample-btn" id="btn-sample-qr">テスト用の QR 画像で試す</button>
+  </div>
+
+  <div class="add-pane" data-pane="uri" hidden>
+    <label for="uri">otpauth URI</label>
+    <textarea id="uri" rows="3" spellcheck="false" placeholder="otpauth://totp/サービス:アカウント?secret=...&amp;issuer=..."></textarea>
+    <button type="button" class="btn" id="btn-parse-uri">読み取る</button>
+  </div>
+
+  <form class="add-pane" data-pane="manual" id="manual-form" hidden autocomplete="off">
+    <div class="grid2">
+      <label>サービス名<input id="m-issuer" required maxlength="60"></label>
+      <label>アカウント名<input id="m-account" maxlength="80"></label>
+    </div>
+    <label>シークレットキー（Base32）<input id="m-secret" required spellcheck="false" autocomplete="off" placeholder="例：JBSW Y3DP EHPK 3PXP（空白・ハイフン・小文字は自動で無視）"></label>
+    <div class="grid3">
+      <label>アルゴリズム<select id="m-alg"><option value="SHA1">SHA-1（標準）</option><option value="SHA256">SHA-256</option><option value="SHA512">SHA-512</option></select></label>
+      <label>桁数<select id="m-digits"><option value="6">6桁（標準）</option><option value="8">8桁</option></select></label>
+      <label>有効期間<select id="m-period"><option value="30">30秒（標準）</option><option value="60">60秒</option></select></label>
+    </div>
+    <button type="submit" class="btn">確認へ</button>
+  </form>
+
+  <p class="add-error" id="add-error" role="alert"></p>
+
+  <div class="preview" id="add-preview" hidden>
+    <h3>この内容で登録します</h3>
+    <dl id="add-preview-list"></dl>
+    <p class="note warn" id="add-mismatch" hidden>QR コードの中の「サービス名」が2か所で食い違っています。なりすましの QR コードでないか、発行元を確認してください。</p>
+    <p class="fine">登録後は、シークレットキーを画面に再表示しません（覗き見・画面共有対策）。移行はパスワード付きの暗号化バックアップで行います。</p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="btn-add-back">やり直す</button>
+      <button type="button" class="btn btn-primary" id="btn-add-confirm">登録する</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- QR 表示ダイアログ -->
+<dialog id="dlg-qr" class="dialog" aria-labelledby="dlg-qr-title">
+  <div class="dialog-head">
+    <h2 id="dlg-qr-title">スマホで照合</h2>
+    <button type="button" class="icon-btn" data-close aria-label="閉じる">&#x2715;</button>
+  </div>
+  <div class="qr-body">
+    <div class="qr-box" id="qr-box"></div>
+    <div>
+      <p id="qr-name" class="qr-name"></p>
+      <ol class="qr-steps">
+        <li>スマホの認証アプリ（Google Authenticator、Microsoft Authenticator など）で「QR コードをスキャン」を選びます。</li>
+        <li>左の QR コードを読み取ります。</li>
+        <li>スマホとこのページに<strong>同じ数字</strong>が表示されれば、計算が正しいことの確認になります。</li>
+        <li>確認後は、スマホ側の登録を削除してください。</li>
+      </ol>
+      <p class="note warn" id="qr-compat" hidden></p>
+      <p class="fine">この QR 表示はデモ専用です。本番アプリでは、登録済みの秘密鍵を QR で再表示しません。</p>
+    </div>
+  </div>
+</dialog>
+
+<!-- 編集ダイアログ -->
+<dialog id="dlg-edit" class="dialog" aria-labelledby="dlg-edit-title">
+  <form id="edit-form" autocomplete="off">
+    <div class="dialog-head">
+      <h2 id="dlg-edit-title">アカウントを編集</h2>
+      <button type="button" class="icon-btn" data-close aria-label="閉じる">&#x2715;</button>
+    </div>
+    <div class="grid2">
+      <label>サービス名<input id="e-issuer" required maxlength="60"></label>
+      <label>アカウント名<input id="e-account" maxlength="80"></label>
+    </div>
+    <label>グループ<select id="e-group"></select></label>
+    <p class="fine">シークレットキー・アルゴリズム・桁数は変更できません（変更が必要な場合は、サービス側で2段階認証を再設定し、新しい QR を登録します）。</p>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-danger" id="btn-delete">削除…</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-close>キャンセル</button>
+      <button type="submit" class="btn btn-primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 削除の確認 -->
+<dialog id="dlg-delete" class="dialog narrow" aria-labelledby="dlg-delete-title">
+  <div class="dialog-head">
+    <h2 id="dlg-delete-title">削除しますか？</h2>
+  </div>
+  <p id="delete-name" class="qr-name"></p>
+  <p class="note danger">削除すると元に戻せません。<strong>先にサービス側で2段階認証を解除するか、別の方法に切り替えてください。</strong>そのままでは、このサービスにログインできなくなる場合があります。</p>
+  <div class="dialog-actions">
+    <span class="spacer"></span>
+    <button type="button" class="btn" data-close>キャンセル</button>
+    <button type="button" class="btn btn-primary danger-fill" id="btn-delete-confirm">削除する</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden>
+  <span id="toast-text"></span>
+  <span class="toast-bar"><span id="toast-progress"></span></span>
+</div>
+
+<div class="menu" id="menu" role="menu" hidden>
+  <button type="button" role="menuitem" data-act="qr">QR を表示（照合用）</button>
+  <button type="button" role="menuitem" data-act="edit">編集・削除</button>
+  <button type="button" role="menuitem" data-act="up">上へ移動</button>
+  <button type="button" role="menuitem" data-act="down">下へ移動</button>
+</div>
+
+<script src="vendor/qrcode-generator-1.4.4.js"></script>
+<script src="vendor/jsQR-1.4.0.js"></script>
+<script src="assets/totp.js"></script>
+<script src="assets/demo.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+.count { font-size: 14px; color: var(--ok); font-weight: 600; margin-left: 6px; font-variant-numeric: tabular-nums; }
+.desc { color: var(--text-2); font-size: 14px; margin: 0 0 8px; }
+.args { font-family: var(--mono); font-size: 12px; color: var(--text-3); overflow-wrap: anywhere; }
+.out { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-top: 2px; }
+td.num { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text-2); text-align: right; }
+td.pass, td.fail { white-space: nowrap; }

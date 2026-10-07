@@ -1,0 +1,12 @@
+# 入札戦略メモ（公開しない）
+_private/
+
+# .NET
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+
+# Vercel
+.vercel/
